@@ -969,18 +969,37 @@
         #cloudLoginBox .cl-input-wrap {
             position: relative; margin-bottom: 16px;
         }
-        #cloudUserIdInput {
-            width: 100%; padding: 14px 18px; font-size: 1.5em;
-            letter-spacing: 6px; text-align: center; font-weight: 700;
+        .cl-mode-tabs {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+            background: #f1f3f5; padding: 6px; border-radius: 12px; margin-bottom: 18px;
+        }
+        .cl-mode-tab {
+            border: none; border-radius: 9px; padding: 10px; cursor: pointer;
+            font-weight: 700; color: #666; background: transparent; transition: all 0.2s ease;
+        }
+        .cl-mode-tab.active {
+            background: white; color: #667eea; box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+        .cl-field-label {
+            display: block; text-align: left; font-size: 0.82em; font-weight: 700;
+            color: #555; margin: 0 0 6px 2px;
+        }
+        #cloudUserIdInput, #cloudUserNameInput {
+            width: 100%; padding: 14px 18px; font-size: 1em;
             border: 3px solid #e9ecef; border-radius: 12px;
             outline: none; transition: border-color 0.2s, box-shadow 0.2s;
-            font-family: 'Courier New', monospace;
+            font-family: inherit;
         }
-        #cloudUserIdInput:focus {
+        #cloudUserIdInput {
+            font-size: 1.5em; letter-spacing: 6px; text-align: center;
+            font-weight: 700; font-family: 'Courier New', monospace;
+        }
+        #cloudUserIdInput:focus, #cloudUserNameInput:focus {
             border-color: #764ba2;
             box-shadow: 0 0 0 4px rgba(118,75,162,0.12);
         }
         #cloudUserIdInput::placeholder { letter-spacing: 2px; color: #ccc; font-size: 0.7em; }
+        #cloudUserNameInput::placeholder { color: #aaa; }
         #cloudLoginBtn {
             width: 100%; padding: 15px;
             background: linear-gradient(135deg,#667eea,#764ba2);
@@ -23402,15 +23421,43 @@ Respond ONLY with this JSON (no markdown):
         let _localSetItem = localStorage.setItem.bind(localStorage);  // original reference
 
         // ── Login ─────────────────────────────────────────────────────
+        let _authMode = 'signup';
+
+        function setAuthMode(mode) {
+            _authMode = mode;
+            const isSignup = mode === 'signup';
+            document.getElementById('signupModeTab').classList.toggle('active', isSignup);
+            document.getElementById('loginModeTab').classList.toggle('active', !isSignup);
+            document.getElementById('cloudNameWrap').style.display = isSignup ? 'block' : 'none';
+            document.getElementById('cloudLoginTitle').textContent = isSignup ? 'Create your account' : 'Welcome back';
+            document.getElementById('cloudLoginSubtitle').textContent = isSignup
+                ? 'Sign up to save quiz history, wrong questions, and progress across devices.'
+                : 'Enter your 10-digit user ID to restore your saved quiz data.';
+            document.getElementById('cloudLoginBtn').textContent = isSignup ? '🚀 Sign Up' : '🔐 Login';
+            document.getElementById('cloudLoginError').style.display = 'none';
+        }
+
+        function generateUserId() {
+            const id = String(Math.floor(1000000000 + Math.random() * 9000000000));
+            document.getElementById('cloudUserIdInput').value = id;
+        }
+
         async function cloudLogin() {
             const input  = document.getElementById('cloudUserIdInput').value.trim();
+            const name   = document.getElementById('cloudUserNameInput').value.trim();
             const errEl  = document.getElementById('cloudLoginError');
             const btn    = document.getElementById('cloudLoginBtn');
 
             errEl.style.display = 'none';
 
+            if (_authMode === 'signup' && name.length < 2) {
+                errEl.textContent = '⚠️ Please enter your name to sign up.';
+                errEl.style.display = 'block';
+                return;
+            }
+
             if (!/^\d{10}$/.test(input)) {
-                errEl.textContent = '⚠️ Please enter exactly 10 digits (e.g. 1234567890).';
+                errEl.textContent = '⚠️ Please enter exactly 10 digits, or click Generate ID.';
                 errEl.style.display = 'block';
                 return;
             }
@@ -23421,7 +23468,7 @@ Respond ONLY with this JSON (no markdown):
                 return;
             }
 
-            btn.textContent = '🔄 Connecting to cloud...';
+            btn.textContent = _authMode === 'signup' ? '🔄 Creating account...' : '🔄 Logging in...';
             btn.disabled = true;
             _cloudUserId = input;
 
@@ -23429,24 +23476,43 @@ Respond ONLY with this JSON (no markdown):
                 const userData = await _fetchUserData(input);
                 const isNew = !userData || Object.keys(userData).length === 0;
 
+                if (_authMode === 'login' && isNew) {
+                    errEl.textContent = '❌ No account found for this ID. Switch to Sign Up to create one.';
+                    errEl.style.display = 'block';
+                    btn.textContent = '🔐 Login';
+                    btn.disabled = false;
+                    return;
+                }
+
+                if (_authMode === 'signup' && !isNew) {
+                    errEl.textContent = '⚠️ This ID already exists. Use Login or generate a new ID.';
+                    errEl.style.display = 'block';
+                    btn.textContent = '🚀 Sign Up';
+                    btn.disabled = false;
+                    return;
+                }
+
                 if (!isNew) {
-                    // Restore all data from cloud into localStorage
                     SYNC_KEYS.forEach(key => {
                         if (userData[key] !== undefined) {
                             _localSetItem(key, JSON.stringify(userData[key]));
                         }
                     });
 
-                    // Refresh app state from restored localStorage
                     try { hardQuestions = JSON.parse(localStorage.getItem('hardQuestions')) || {}; } catch(e) {}
                     loadHistory();
                     updateAnalysis();
                     loadWrongQuestions();
                     loadHardQuestions();
 
-                    _showToast('✅ Welcome back! Your data has been restored from the cloud.', '#4caf50');
+                    _showToast(`✅ Welcome back${userData.profile?.name ? ', ' + userData.profile.name : ''}! Your data has been restored.`, '#4caf50');
                 } else {
-                    _showToast('👋 New account created! Your data will sync automatically.', '#667eea');
+                    await _createCloudUser(input, {
+                        profile: { name, createdAt: new Date().toISOString() },
+                        quizHistory: [], wrongQuestions: {}, hardQuestions: {}, recentSearches: [],
+                        quizState: null, customQuestions: {}, deletedQuestions: []
+                    });
+                    _showToast(`👋 Account created for ${name}! Save your ID: ${input}`, '#667eea');
                 }
 
                 _localSetItem('cloudUserId', input);
@@ -23458,7 +23524,7 @@ Respond ONLY with this JSON (no markdown):
                 console.error('Cloud login error:', err);
                 errEl.textContent = '❌ Could not connect to GitHub. Check your Token & Gist ID setup, or try again.';
                 errEl.style.display = 'block';
-                btn.textContent = '🚀 Login / Create Account';
+                btn.textContent = _authMode === 'signup' ? '🚀 Sign Up' : '🔐 Login';
                 btn.disabled = false;
             }
         }
@@ -23481,6 +23547,25 @@ Respond ONLY with this JSON (no markdown):
         async function _fetchUserData(userId) {
             const all = await _fetchGistAll();
             return all[userId] || {};
+        }
+
+        async function _createCloudUser(userId, userData) {
+            const all = await _fetchGistAll();
+            all[userId] = { ...userData, _lastSync: new Date().toISOString() };
+
+            const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${GITHUB_TOKEN}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.github.v3+json',
+                    'X-GitHub-Api-Version': '2022-11-28'
+                },
+                body: JSON.stringify({
+                    files: { [GIST_FILE]: { content: JSON.stringify(all, null, 2) } }
+                })
+            });
+            if (!res.ok) throw new Error(`GitHub ${res.status}: ${res.statusText}`);
         }
 
         async function _pushUserData(userId) {
