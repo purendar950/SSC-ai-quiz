@@ -23420,6 +23420,28 @@ Respond ONLY with this JSON (no markdown):
         let _isSyncing    = false;
         let _localSetItem = localStorage.setItem.bind(localStorage);  // original reference
 
+        function _getLocalAccounts() {
+            try { return JSON.parse(localStorage.getItem('localQuizUsers') || '{}'); }
+            catch(e) { return {}; }
+        }
+
+        function _saveLocalAccount(userId, name = '') {
+            const accounts = _getLocalAccounts();
+            accounts[userId] = { name, updatedAt: new Date().toISOString() };
+            _localSetItem('localQuizUsers', JSON.stringify(accounts));
+        }
+
+        function _localAccountExists(userId) {
+            return Boolean(_getLocalAccounts()[userId]);
+        }
+
+        function _finishLogin(userId) {
+            _localSetItem('cloudUserId', userId);
+            _activateSync();
+            _showUserBar(userId);
+            document.getElementById('cloudLoginOverlay').style.display = 'none';
+        }
+
         // ── Login ─────────────────────────────────────────────────────
         let _authMode = 'signup';
 
@@ -23505,6 +23527,7 @@ Respond ONLY with this JSON (no markdown):
                     loadWrongQuestions();
                     loadHardQuestions();
 
+                    _saveLocalAccount(input, userData.profile?.name || '');
                     _showToast(`✅ Welcome back${userData.profile?.name ? ', ' + userData.profile.name : ''}! Your data has been restored.`, '#4caf50');
                 } else {
                     await _createCloudUser(input, {
@@ -23512,17 +23535,29 @@ Respond ONLY with this JSON (no markdown):
                         quizHistory: [], wrongQuestions: {}, hardQuestions: {}, recentSearches: [],
                         quizState: null, customQuestions: {}, deletedQuestions: []
                     });
+                    _saveLocalAccount(input, name);
                     _showToast(`👋 Account created for ${name}! Save your ID: ${input}`, '#667eea');
                 }
 
-                _localSetItem('cloudUserId', input);
-                _activateSync();
-                _showUserBar(input);
-                document.getElementById('cloudLoginOverlay').style.display = 'none';
+                _finishLogin(input);
 
             } catch(err) {
                 console.error('Cloud login error:', err);
-                errEl.textContent = '❌ Could not connect to GitHub. Check your Token & Gist ID setup, or try again.';
+
+                if (_authMode === 'signup') {
+                    _saveLocalAccount(input, name);
+                    _finishLogin(input);
+                    _showToast(`👋 Account created locally for ${name}! Save your ID: ${input}. Cloud sync is unavailable.`, '#667eea');
+                    return;
+                }
+
+                if (_authMode === 'login' && _localAccountExists(input)) {
+                    _finishLogin(input);
+                    _showToast('✅ Logged in locally. Cloud sync is unavailable right now.', '#4caf50');
+                    return;
+                }
+
+                errEl.textContent = '❌ Could not connect to cloud, and no local account was found for this ID.';
                 errEl.style.display = 'block';
                 btn.textContent = _authMode === 'signup' ? '🚀 Sign Up' : '🔐 Login';
                 btn.disabled = false;
