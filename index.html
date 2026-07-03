@@ -21161,7 +21161,7 @@ Mauryan_Dynasty: [
             initVoiceMode();
             initKeyboardNavigation();
             initRevisionSelection();
-            _initCloudSync(); // ← must be last so DOM is fully ready
+            // Login/signup removed: open quiz directly without account gate.
 
             // Save state on page unload
             window.addEventListener('beforeunload', () => {
@@ -23821,32 +23821,7 @@ Respond ONLY with this JSON (no markdown):
     <!-- ══════════════════════════════════════════════
          CLOUD SYNC LOGIN OVERLAY
     ══════════════════════════════════════════════ -->
-    <div id="cloudLoginOverlay">
-        <div id="cloudLoginBox">
-            <div class="cl-logo">☁️</div>
-            <h2>Welcome to Quiz App</h2>
-            <p class="cl-sub">Enter your <strong>10-digit User ID</strong> to sync your progress across all devices. No password needed!</p>
-
-            <div class="cl-features">
-                <div class="cl-feature"><strong>📊 Sync History</strong>Quiz scores saved forever</div>
-                <div class="cl-feature"><strong>❌ Wrong Q's</strong>Track mistakes anywhere</div>
-                <div class="cl-feature"><strong>⭐ Hard Q's</strong>Your marked questions</div>
-                <div class="cl-feature"><strong>🔄 Auto-save</strong>Saves every 3 seconds</div>
-            </div>
-
-            <div class="cl-input-wrap">
-                <input type="number" id="cloudUserIdInput" placeholder="Enter 10-digit ID" maxlength="10"
-                    oninput="if(this.value.length>10)this.value=this.value.slice(0,10);"
-                    onkeydown="if(event.key==='Enter')cloudLogin();">
-            </div>
-            <div id="cloudLoginError"></div>
-            <button id="cloudLoginBtn" onclick="cloudLogin()">🚀 Login / Create Account</button>
-
-            <hr class="cl-divider">
-            <p class="cl-note">💡 <strong>New user?</strong> Just pick any 10-digit number to create your account.<br>
-            <strong>Returning?</strong> Enter the same number to restore all your data.</p>
-        </div>
-    </div>
+    <!-- Login/signup overlay removed: quiz opens directly. -->
 
     <!-- User menu popup -->
     <div id="cloudUserMenu" style="display:none;position:fixed;top:80px;right:20px;background:white;
